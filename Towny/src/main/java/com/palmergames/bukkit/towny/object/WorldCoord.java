@@ -369,6 +369,10 @@ public class WorldCoord extends Coord {
 	}
 
 	public boolean canBeStolen() {
-		return TownySettings.isOverClaimingAllowingStolenLand() && hasTownBlock() && getTownOrNull().isOverClaimed();
+		if (!hasTownBlock()) return false;
+		Town town = getTownOrNull();
+		if (town == null) return false;
+		return (TownySettings.isOverClaimingAllowingStolenLand() && town.isOverClaimed())
+			|| (TownySettings.isRuinBlockClaimingEnabled() && town.isRuined());
 	}
 }

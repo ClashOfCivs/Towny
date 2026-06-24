@@ -3538,6 +3538,17 @@ public enum ConfigNodes {
 			"false",
 			"",
 			"# When enabled, when the last resident is removed from a town and it becomes empty (such as when inactive resident deletion is enabled), the town will turn into a ruin instead of being immediately removed."),
+	TOWN_RUINING_ALLOW_RUIN_BLOCK_CLAIMING(
+			"town_ruining.town_ruins.allow_ruin_block_claiming",
+			"false",
+			"",
+			"# If true, mayors of other towns can use /t claim on individual blocks belonging to a ruined town.",
+			"# The ruin is fully deleted when its last block is claimed away."),
+	TOWN_RUINING_RUIN_BLOCK_CLAIM_PRICE(
+			"town_ruining.town_ruins.ruin_block_claim_price",
+			"0.0",
+			"",
+			"# Economy cost per block claimed from a ruined town. Set to 0.0 for free."),
 
 
 	ASCII_MAP_SYMBOLS("ascii_map_symbols", "", "", "",

@@ -1513,6 +1513,8 @@ msg_time_remaining_before_full_removal: 'Time remaining before full removal: %d 
 msg_time_until_reclaim_available: 'Time until reclaim available: %d hours.'
 msg_reclaim_available: 'Reclaim available.'
 msg_ruined_town_being_deleted: "%s was ruined for %s hours and is being deleted."
+msg_err_cannot_claim_from_own_ruin: "You cannot claim blocks from your own town's ruin. Use /t reclaim instead."
+msg_ruined_town_fully_claimed: "The ruins of %s have been fully claimed and have disappeared."
 
 
 #Added in 0.93

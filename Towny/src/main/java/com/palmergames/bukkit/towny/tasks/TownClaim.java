@@ -6,6 +6,7 @@ import com.palmergames.bukkit.towny.TownyMessaging;
 import com.palmergames.bukkit.towny.TownySettings;
 import com.palmergames.bukkit.towny.TownyUniverse;
 import com.palmergames.bukkit.towny.confirmations.Confirmation;
+import com.palmergames.bukkit.towny.event.DeleteTownEvent;
 import com.palmergames.bukkit.towny.event.TownClaimEvent;
 import com.palmergames.bukkit.towny.event.town.TownPreUnclaimEvent;
 import com.palmergames.bukkit.towny.event.town.TownUnclaimEvent;
@@ -191,22 +192,39 @@ public class TownClaim implements Runnable {
 	private void townClaim(WorldCoord worldCoord) throws TownyException {
 		boolean alreadyClaimed = worldCoord.hasTownBlock();
 
+		// Prevent claiming blocks from your own ruined town — use /t reclaim instead.
+		if (alreadyClaimed && worldCoord.getTownOrNull() != null
+				&& worldCoord.getTownOrNull().equals(town)
+				&& worldCoord.getTownOrNull().isRuined())
+			throw new TownyException(Translatable.of("msg_err_cannot_claim_from_own_ruin"));
+
 		if (alreadyClaimed && !worldCoord.canBeStolen())
 			throw new TownyException(Translatable.of("msg_already_claimed", worldCoord.getTownOrNull().getName()));
 
 		TownBlock townBlock = !alreadyClaimed ? new TownBlock(worldCoord) : worldCoord.getTownBlockOrNull();
-	
+		Town oldTown = alreadyClaimed ? worldCoord.getTownOrNull() : null;
+
 		// If this is an occaision where a town is stealing this land, do the
 		// prep to clean the old town from the townblock.
 		if (alreadyClaimed) {
+			boolean isRuinClaim = oldTown.isRuined();
+
+			// Charge ruin-specific price (separate from the normal overclaim price).
+			if (isRuinClaim) {
+				double price = TownySettings.getRuinBlockClaimPrice();
+				if (TownyEconomyHandler.isActive() && price > 0) {
+					if (!town.getAccount().canPayFromHoldings(price))
+						throw new TownyException(Translatable.of("msg_err_no_money"));
+					town.getAccount().withdraw(price, "Ruin block claim");
+				}
+			}
+
 			if (TownySettings.getOverclaimingCommandCooldownInSeconds() > 0 &&
 				CooldownTimerTask.hasCooldown(town.getUUID().toString(), "overclaimingcooldown")) {
 				long req = CooldownTimerTask.getCooldownRemaining(town.getUUID().toString(), "overclaimingcooldown") * 1000;
 				String timeRemaining = player != null ? TimeMgmt.getFormattedTimeValue(req, Translation.getLocale(player)) : TimeMgmt.getFormattedTimeValue(req);
 				throw new TownyException(Translatable.of("msg_err_your_cannot_overclaim_for_another", timeRemaining));
 			}
-
-			Town oldTown = worldCoord.getTownOrNull();
 
 			//  Fire an event for other plugins.
 			BukkitTools.fireEvent(new TownUnclaimEvent(oldTown, worldCoord, isOverClaim));
@@ -221,7 +239,7 @@ public class TownClaim implements Runnable {
 			// - Removing the town's jail if it is.
 			// - Removing the oldTown's nation spawn point.
 			// - Updating the oldTown's TownBlockTypeCache.
-			
+
 			if (TownySettings.getOverclaimingCommandCooldownInSeconds() > 0)
 				CooldownTimerTask.addCooldownTimer(town.getUUID().toString(), "overclaimingcooldown", TownySettings.getOverclaimingCommandCooldownInSeconds());
 		}
@@ -243,6 +261,12 @@ public class TownClaim implements Runnable {
 
 		// Raise an event for the claim
 		BukkitTools.fireEvent(new TownClaimEvent(townBlock, player, isOverClaim));
+
+		// Delete the ruin if all its blocks have been claimed away.
+		if (oldTown != null && oldTown.isRuined() && oldTown.getTownBlocks().isEmpty()) {
+			TownyUniverse.getInstance().getDataSource().removeTown(oldTown, DeleteTownEvent.Cause.RUINED);
+			TownyMessaging.sendGlobalMessage(Translatable.of("msg_ruined_town_fully_claimed", oldTown.getName()));
+		}
 	}
 
 	private void handleRevertOnUnclaimPossiblities(WorldCoord worldCoord, TownBlock townBlock) {

@@ -4169,5 +4169,13 @@ public class TownySettings {
 	public static boolean areEmptyTownsBecomingRuins() {
 		return getBoolean(ConfigNodes.TOWN_RUINING_EMPTY_TOWNS_BECOME_RUINS);
 	}
+
+	public static boolean isRuinBlockClaimingEnabled() {
+		return getBoolean(ConfigNodes.TOWN_RUINING_ALLOW_RUIN_BLOCK_CLAIMING);
+	}
+
+	public static double getRuinBlockClaimPrice() {
+		return getDouble(ConfigNodes.TOWN_RUINING_RUIN_BLOCK_CLAIM_PRICE);
+	}
 }
 
