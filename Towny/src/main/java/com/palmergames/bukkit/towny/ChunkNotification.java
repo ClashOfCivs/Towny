@@ -43,6 +43,8 @@ public class ChunkNotification {
 	public static String plotTypeNotificationFormat = Colors.GOLD + "[%s]";	
 	public static String groupNotificationFormat = Colors.WHITE + "[%s]";
 	public static String districtNotificationFormat = Colors.DARK_GREEN + "[%s]";
+	public static String rentalForRentNotificationFormat = Colors.GOLD + "[For Rent: %s/day]";
+	public static String rentalRentingNotificationFormat = Colors.GOLD + "[Renting: %s/day]";
 
 	/**
 	 * Called on Config load.
@@ -79,6 +81,9 @@ public class ChunkNotification {
 	PlotGroup fromPlotGroup = null, toPlotGroup = null;
 	District fromDistrict = null, toDistrict = null;
 	Resident viewerResident = null;
+	boolean fromForRent = false;
+	java.util.UUID fromRentedBy = null;
+	double fromRentPrice = 0;
 
 	public ChunkNotification(WorldCoord from, WorldCoord to) {
 
@@ -98,8 +103,11 @@ public class ChunkNotification {
 			}
 			fromTown = fromTownBlock.getTownOrNull();
 			fromResident = fromTownBlock.getResidentOrNull();
-			
-			
+			if (fromTownBlock.isForRent()) {
+				fromForRent = true;
+				fromRentedBy = fromTownBlock.getRentedBy();
+				fromRentPrice = fromTownBlock.getRentPrice();
+			}
 		} else {
 			fromWild = true;
 		}
@@ -293,6 +301,10 @@ public class ChunkNotification {
 		if (output != null && output.length() > 0)
 			out.add(output);
 
+		output = getRentalNotification();
+		if (output != null && output.length() > 0)
+			out.add(output);
+
 		return out;
 	}
 
@@ -356,6 +368,24 @@ public class ChunkNotification {
 
 		if (toPlotType != null && !toPlotType.equals(fromPlotType) && !TownBlockType.RESIDENTIAL.equals(toPlotType))
 			return String.format(plotTypeNotificationFormat, StringMgmt.capitalize(toPlotType.getName()));
+		return null;
+	}
+
+	public String getRentalNotification() {
+		if (toTownBlock == null)
+			return null;
+		boolean toForRent = toTownBlock.isForRent();
+		java.util.UUID toRentedBy = toTownBlock.getRentedBy();
+		double toRentPrice = toTownBlock.getRentPrice();
+		// Suppress if rental state is identical to the plot we came from.
+		if (fromForRent == toForRent
+				&& (fromRentedBy == null ? toRentedBy == null : fromRentedBy.equals(toRentedBy))
+				&& fromRentPrice == toRentPrice)
+			return null;
+		if (toForRent && toRentedBy == null)
+			return String.format(rentalForRentNotificationFormat, TownyEconomyHandler.getFormattedBalance(toRentPrice));
+		if (toRentedBy != null)
+			return String.format(rentalRentingNotificationFormat, TownyEconomyHandler.getFormattedBalance(toRentPrice));
 		return null;
 	}
 }

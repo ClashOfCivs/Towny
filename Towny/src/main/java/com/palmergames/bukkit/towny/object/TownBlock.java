@@ -32,6 +32,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
 
 public class TownBlock extends TownyObject {
 
@@ -50,6 +51,10 @@ public class TownBlock extends TownyObject {
 	private Jail jail;
 	private @Nullable Map<Resident, PermissionData> permissionOverrides = null;
 	private @Nullable Set<Resident> trustedResidents = null;
+	private boolean forRent = false;
+	private double rentPrice = 0.0;
+	private @Nullable UUID rentedBy = null;
+	private long rentedAt = 0L;
 
 	//Plot level permissions
 	protected TownyPermission permissions = new TownyPermission();
@@ -749,6 +754,39 @@ public class TownBlock extends TownyObject {
 	public void setMaxTownMembershipDays(int maxTownMembershipDays) {
 		// 32766 because this is stored as a SMALLINT when MYSQL is used.
 		this.maxTownMembershipDays = Math.min(32766, maxTownMembershipDays);
+	}
+
+	public boolean isForRent() {
+		return forRent;
+	}
+
+	public void setForRent(boolean forRent) {
+		this.forRent = forRent;
+	}
+
+	public double getRentPrice() {
+		return rentPrice;
+	}
+
+	public void setRentPrice(double rentPrice) {
+		this.rentPrice = rentPrice;
+	}
+
+	@Nullable
+	public UUID getRentedBy() {
+		return rentedBy;
+	}
+
+	public void setRentedBy(@Nullable UUID rentedBy) {
+		this.rentedBy = rentedBy;
+	}
+
+	public long getRentedAt() {
+		return rentedAt;
+	}
+
+	public void setRentedAt(long rentedAt) {
+		this.rentedAt = rentedAt;
 	}
 
 	@ApiStatus.Internal

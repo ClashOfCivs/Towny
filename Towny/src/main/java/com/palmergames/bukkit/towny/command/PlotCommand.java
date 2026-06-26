@@ -113,7 +113,9 @@ public class PlotCommand extends BaseCommand implements CommandExecutor {
 		"group",
 		"district",
 		"jailcell",
-		"trust"
+		"trust",
+		"rent",
+		"unrent"
 	);
 	
 	private static final List<String> plotGroupTabCompletes = Arrays.asList(
@@ -153,7 +155,8 @@ public class PlotCommand extends BaseCommand implements CommandExecutor {
 		"maxjoindays",
 		"outpost",
 		"name",
-		"perm"
+		"perm",
+		"rent"
 	);
 	
 	private static final List<String> plotRectCircleCompletes = Arrays.asList(
@@ -362,6 +365,8 @@ public class PlotCommand extends BaseCommand implements CommandExecutor {
 		case "toggle" -> plotToggle(player, resident, townBlock, StringMgmt.remFirstArg(split));
 		case "trust" -> parsePlotTrustCommand(player, StringMgmt.remFirstArg(split));
 		case "unclaim" -> parsePlotUnclaim(player, split, resident);
+		case "rent" -> parsePlotRent(player, resident, townBlock);
+		case "unrent" -> parsePlotUnrent(player, resident, townBlock);
 		default -> {
 			if (TownyCommandAddonAPI.hasCommand(CommandType.PLOT, split[0]))
 				TownyCommandAddonAPI.getAddonCommand(CommandType.PLOT, split[0]).execute(player, "plot", split);
@@ -463,6 +468,16 @@ public class PlotCommand extends BaseCommand implements CommandExecutor {
 
 		BukkitTools.ifCancelledThenThrow(new PlotPreClearEvent(townBlock));
 
+		if (townBlock.isForRent()) {
+			if (townBlock.getRentedBy() != null)
+				evictRentalTenant(townBlock, true);
+			townBlock.setForRent(false);
+			townBlock.setRentPrice(0.0);
+			townBlock.setTaxed(true);
+			townBlock.save();
+			TownyMessaging.sendMsg(resident, Translatable.of("msg_plot_no_longer_for_rent"));
+		}
+
 		Collection<Material> materialsToDelete = townBlock.getWorld().getPlotManagementMayorDelete();
 		if (materialsToDelete.isEmpty())
 			return;
@@ -493,11 +508,20 @@ public class PlotCommand extends BaseCommand implements CommandExecutor {
 
 		// Evict and save the townblock.
 		townBlock.evictOwnerFromTownBlock(resell);
+		// If this was a rental plot, clear the rental occupancy state too.
+		if (isRentalPlot(townBlock) && townBlock.getRentedBy() != null) {
+			townBlock.setRentedBy(null);
+			townBlock.setRentedAt(0L);
+			townBlock.save();
+		}
 		TownyMessaging.sendMsg(resident, Translatable.of("msg_plot_evict"));
 	}
 
 	public void parsePlotForSale(Player player, String[] split, Resident resident, TownBlock townBlock) throws TownyException {
 		checkPermOrThrow(player, PermissionNodes.TOWNY_COMMAND_PLOT_FORSALE.getNode());
+
+		if (isRentalPlot(townBlock))
+			throw new TownyException(Translatable.of("msg_err_plot_is_rental_cannot_sell"));
 
 		WorldCoord pos = WorldCoord.parseWorldCoord(player);
 		Town town = townBlock.getTownOrNull();
@@ -594,6 +618,8 @@ public class PlotCommand extends BaseCommand implements CommandExecutor {
 		case "perm":
 			checkPermOrThrow(player, PermissionNodes.TOWNY_COMMAND_PLOT_SET_PERM.getNode());
 			TownyAPI.getInstance().testPlotOwnerOrThrow(resident, townBlock); // Test we are allowed to work on this plot
+			if (isCurrentRenter(resident, townBlock))
+				throw new TownyException(Translatable.of("msg_err_renter_cannot_do_this"));
 			setTownBlockPermissions(player, townBlock.getTownBlockOwner(), townBlock, StringMgmt.remFirstArg(split));
 			break;
 		case "name":
@@ -604,8 +630,13 @@ public class PlotCommand extends BaseCommand implements CommandExecutor {
 		case "outpost":
 			checkPermOrThrow(player, PermissionNodes.TOWNY_COMMAND_TOWN_CLAIM_OUTPOST.getNode());
 			TownyAPI.getInstance().testPlotOwnerOrThrow(resident, townBlock); // Test we are allowed to work on this plot
+			if (isCurrentRenter(resident, townBlock))
+				throw new TownyException(Translatable.of("msg_err_renter_cannot_do_this"));
 			boolean spawn = split.length == 2 && split[1].equalsIgnoreCase("spawn");
 			parsePlotSetOutpost(player, resident, townBlock, spawn);
+			break;
+		case "rent":
+			parsePlotSetRent(player, resident, townBlock, StringMgmt.remFirstArg(split));
 			break;
 		default:
 			if (tryPlotSetAddonCommand(player, split))
@@ -683,6 +714,9 @@ public class PlotCommand extends BaseCommand implements CommandExecutor {
 
 		// Test we are allowed to work on this plot
 		TownyAPI.getInstance().testPlotOwnerOrThrow(resident, townBlock);
+
+		if (isCurrentRenter(resident, townBlock))
+			throw new TownyException(Translatable.of("msg_err_plot_is_rental_cannot_sell"));
 
 		if (TownBlockType.ARENA.equals(townBlockType) && TownySettings.getOutsidersPreventPVPToggle()) {
 			for (Player target : Bukkit.getOnlinePlayers()) {
@@ -791,6 +825,9 @@ public class PlotCommand extends BaseCommand implements CommandExecutor {
 	public void parsePlotNotForSale(Player player, String[] args, Resident resident, TownBlock townBlock) throws TownyException {
 		checkPermOrThrow(player, PermissionNodes.TOWNY_COMMAND_PLOT_NOTFORSALE.getNode());
 
+		if (isRentalPlot(townBlock))
+			throw new TownyException(Translatable.of("msg_err_plot_is_rental_cannot_sell"));
+
 		List<WorldCoord> selection = AreaSelectionUtil.selectWorldCoordArea(resident, WorldCoord.parseWorldCoord(player), args);
 		selection = AreaSelectionUtil.filterPlotsForSale(selection);
 		
@@ -843,6 +880,11 @@ public class PlotCommand extends BaseCommand implements CommandExecutor {
 
 		List<WorldCoord> selection = AreaSelectionUtil.selectWorldCoordArea(resident, WorldCoord.parseWorldCoord(player), StringMgmt.remFirstArg(split));
 		selection = AreaSelectionUtil.filterOwnedBlocks(resident, selection);
+		// Renters must not unclaim the plots they're renting.
+		selection = selection.stream().filter(wc -> {
+			TownBlock tb = wc.getTownBlockOrNull();
+			return tb == null || !isCurrentRenter(resident, tb);
+		}).collect(Collectors.toList());
 
 		if (selection.size() == 0)
 			throw new TownyException(Translatable.of("msg_err_empty_area_selection"));
@@ -1133,6 +1175,9 @@ public class PlotCommand extends BaseCommand implements CommandExecutor {
 		}
 
 		TownyAPI.getInstance().testPlotOwnerOrThrow(resident, townBlock); // Test we are allowed to work on this plot
+
+		if (isCurrentRenter(resident, townBlock))
+			throw new TownyException(Translatable.of("msg_err_renter_cannot_do_this"));
 
 		catchPlotGroup(townBlock, "/plot group toggle ?");
 
@@ -2160,6 +2205,9 @@ public class PlotCommand extends BaseCommand implements CommandExecutor {
 		// If this fails it will trigger a TownyException.
 		TownyAPI.getInstance().testPlotOwnerOrThrow(getResidentOrThrow(player), townBlock);
 
+		if (isCurrentRenter(getResidentOrThrow(player), townBlock))
+			throw new TownyException(Translatable.of("msg_err_renter_cannot_do_this"));
+
 		catchPlotGroup(townBlock, "/plot group trust");
 
 		Resident resident = TownyAPI.getInstance().getResident(args[1]);
@@ -2316,6 +2364,9 @@ public class PlotCommand extends BaseCommand implements CommandExecutor {
 		// Test that the command sender counts as a plot owner.
 		TownyAPI.getInstance().testPlotOwnerOrThrow(getResidentOrThrow(player), townBlock);
 
+		if (isCurrentRenter(getResidentOrThrow(player), townBlock))
+			throw new TownyException(Translatable.of("msg_err_renter_cannot_do_this"));
+
 		// Don't allow this command to be run on plot groups.
 		catchPlotGroup(townBlock, "/plot group perm " + args[0].toLowerCase(Locale.ROOT));
 
@@ -2388,7 +2439,104 @@ public class PlotCommand extends BaseCommand implements CommandExecutor {
 		// Make sure that the player is in a plotgroup.
 		if (!townBlock.hasDistrict())
 			throw new TownyException(Translatable.of("msg_err_plot_not_associated_with_a_district"));
-		
+
 		return townBlock.getDistrict();
+	}
+
+	public void parsePlotSetRent(Player player, Resident resident, TownBlock townBlock, String[] args) throws TownyException {
+		checkPermOrThrow(player, PermissionNodes.TOWNY_COMMAND_PLOT_ASMAYOR.getNode());
+		TownyAPI.getInstance().testPlotOwnerOrThrow(resident, townBlock);
+
+		if (args.length == 0) {
+			HelpMenu.PLOT_SET.send(player);
+			return;
+		}
+
+		if (!args[0].equalsIgnoreCase("off")) {
+			if (townBlock.getPlotPrice() != -1)
+				throw new TownyException(Translatable.of("msg_err_plot_for_sale_cannot_rent"));
+			if (townBlock.hasResident() && townBlock.getRentedBy() == null)
+				throw new TownyException(Translatable.of("msg_err_plot_has_owner_cannot_rent"));
+		}
+
+		if (args[0].equalsIgnoreCase("off")) {
+			if (townBlock.getRentedBy() != null)
+				evictRentalTenant(townBlock, true);
+			townBlock.setRentPrice(0.0);
+			townBlock.setForRent(false);
+			townBlock.setTaxed(true);
+			townBlock.save();
+			TownyMessaging.sendMsg(player, Translatable.of("msg_plot_no_longer_for_rent"));
+		} else {
+			double price = MoneyUtil.getMoneyAboveZeroOrThrow(args[0]);
+			townBlock.setRentPrice(price);
+			townBlock.setForRent(true);
+			townBlock.setTaxed(false);
+			townBlock.save();
+			TownyMessaging.sendMsg(player, Translatable.of("msg_plot_now_for_rent", TownyEconomyHandler.getFormattedBalance(price)));
+		}
+	}
+
+	public void parsePlotRent(Player player, Resident resident, TownBlock townBlock) throws TownyException {
+		checkPermOrThrow(player, PermissionNodes.TOWNY_COMMAND_PLOT_RENT.getNode());
+
+		if (!townBlock.isForRent())
+			throw new TownyException(Translatable.of("msg_err_plot_not_for_rent"));
+		if (townBlock.getRentedBy() != null)
+			throw new TownyException(Translatable.of("msg_err_plot_already_rented"));
+		if (townBlock.hasResident(resident))
+			throw new TownyException(Translatable.of("msg_err_cannot_rent_own_plot"));
+
+		Town town = townBlock.getTownOrNull();
+		if (town == null || !town.hasResident(resident))
+			throw new TownyException(Translatable.of("msg_err_not_town_member_rent"));
+
+		double price = townBlock.getRentPrice();
+		if (TownyEconomyHandler.isActive() && price > 0) {
+			if (!resident.getAccount().canPayFromHoldings(price))
+				throw new TownyException(Translatable.of("msg_err_no_money"));
+			resident.getAccount().withdraw(price, "First rent payment for plot in " + town.getName());
+			town.getAccount().deposit(price, "Rent from " + resident.getName());
+		}
+
+		townBlock.setRentedBy(resident.getUUID());
+		townBlock.setRentedAt(System.currentTimeMillis());
+		townBlock.setResident(resident, true);
+		townBlock.save();
+		TownyMessaging.sendMsg(player, Translatable.of("msg_plot_rented", TownyEconomyHandler.getFormattedBalance(price)));
+	}
+
+	public void parsePlotUnrent(Player player, Resident resident, TownBlock townBlock) throws TownyException {
+		checkPermOrThrow(player, PermissionNodes.TOWNY_COMMAND_PLOT_RENT.getNode());
+
+		if (townBlock.getRentedBy() == null || !townBlock.getRentedBy().equals(resident.getUUID()))
+			throw new TownyException(Translatable.of("msg_err_plot_not_for_rent"));
+
+		evictRentalTenant(townBlock, false);
+		TownyMessaging.sendMsg(player, Translatable.of("msg_plot_unrented"));
+	}
+
+	private static boolean isRentalPlot(TownBlock tb) {
+		return tb.isForRent();
+	}
+
+	private static boolean isCurrentRenter(Resident resident, TownBlock tb) {
+		return tb.getRentedBy() != null && tb.getRentedBy().equals(resident.getUUID());
+	}
+
+	public static void evictRentalTenant(TownBlock townBlock, boolean notifyTenant) {
+		UUID tenantUUID = townBlock.getRentedBy();
+		if (notifyTenant && tenantUUID != null) {
+			Resident tenant = TownyUniverse.getInstance().getResident(tenantUUID);
+			if (tenant != null && tenant.isOnline())
+				TownyMessaging.sendMsg(tenant.getPlayer(), Translatable.of("msg_rent_evicted_no_funds", townBlock.getTownOrNull() != null ? townBlock.getTownOrNull().getName() : "your town"));
+		}
+		townBlock.setRentedBy(null);
+		townBlock.setRentedAt(0L);
+		townBlock.setName(""); // clear any name the renter may have set
+		if (townBlock.hasResident() && tenantUUID != null && townBlock.getResidentOrNull() != null
+				&& townBlock.getResidentOrNull().getUUID().equals(tenantUUID))
+			townBlock.removeResident();
+		townBlock.save();
 	}
 }

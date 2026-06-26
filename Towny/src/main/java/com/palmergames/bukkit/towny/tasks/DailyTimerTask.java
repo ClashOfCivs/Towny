@@ -3,6 +3,7 @@ package com.palmergames.bukkit.towny.tasks;
 import com.palmergames.bukkit.towny.Towny;
 import com.palmergames.bukkit.towny.TownyAPI;
 import com.palmergames.bukkit.towny.TownyEconomyHandler;
+import com.palmergames.bukkit.towny.TownyUniverse;
 import com.palmergames.bukkit.towny.TownyMessaging;
 import com.palmergames.bukkit.towny.TownySettings;
 import com.palmergames.bukkit.towny.event.DeleteTownEvent;
@@ -89,6 +90,11 @@ public class DailyTimerTask extends TownyTimerTask {
 			}
 		} else
 			TownyMessaging.sendGlobalMessage(Translatable.of("msg_new_day"));
+
+		if (TownyEconomyHandler.isActive()) {
+			TownyMessaging.sendDebugMsg("Collecting Rent");
+			collectRent();
+		}
 
 		/*
 		 * If enabled, remove old residents who haven't logged in for the configured number of days.
@@ -880,5 +886,40 @@ public class DailyTimerTask extends TownyTimerTask {
 
 	private String prettyMoney(double money) {
 		return TownyEconomyHandler.getFormattedBalance(money);
+	}
+
+	private void collectRent() {
+		for (TownBlock tb : TownyAPI.getInstance().getTownBlocks()) {
+			if (tb.getRentedBy() == null)
+				continue;
+
+			Resident tenant = TownyUniverse.getInstance().getResident(tb.getRentedBy());
+			Town town = tb.getTownOrNull();
+
+			if (tenant == null || town == null) {
+				tb.setRentedBy(null);
+				tb.setRentedAt(0L);
+				tb.removeResident();
+				tb.save();
+				continue;
+			}
+
+			double price = tb.getRentPrice();
+			if (price <= 0)
+				continue;
+
+			if (!tenant.getAccount().canPayFromHoldings(price)) {
+				if (tenant.isOnline())
+					TownyMessaging.sendMsg(tenant.getPlayer(), Translatable.of("msg_rent_evicted_no_funds", town.getName()));
+				TownyMessaging.sendPrefixedTownMessage(town, Translatable.of("msg_rent_tenant_evicted", tenant.getName()));
+				tb.setRentedBy(null);
+				tb.setRentedAt(0L);
+				tb.removeResident();
+				tb.save();
+			} else {
+				tenant.getAccount().withdraw(price, "Rent for plot in " + town.getName());
+				town.getAccount().deposit(price, "Rent from " + tenant.getName());
+			}
+		}
 	}
 }

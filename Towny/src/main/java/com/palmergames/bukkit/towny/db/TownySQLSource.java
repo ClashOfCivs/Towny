@@ -2000,6 +2000,16 @@ public final class TownySQLSource extends TownyDatabaseHandler {
 						townBlock.getPlotObjectGroup().setPermissionOverrides(townBlock.getPermissionOverrides());
 					}
 				}
+
+				try {
+					townBlock.setForRent(rs.getBoolean("forRent"));
+					townBlock.setRentPrice(rs.getDouble("rentPrice"));
+					line = rs.getString("rentedBy");
+					if (line != null && !line.isEmpty())
+						townBlock.setRentedBy(UUID.fromString(line.trim()));
+					townBlock.setRentedAt(rs.getLong("rentedAt"));
+				} catch (SQLException ignored) {
+				}
 			}
 
 		} catch (SQLException ex) {
@@ -2711,6 +2721,11 @@ public final class TownySQLSource extends TownyDatabaseHandler {
 			} else {
 				tb_hm.put("customPermissionData", "");
 			}
+
+			tb_hm.put("forRent", townBlock.isForRent());
+			tb_hm.put("rentPrice", townBlock.getRentPrice());
+			tb_hm.put("rentedBy", townBlock.getRentedBy() != null ? townBlock.getRentedBy().toString() : "");
+			tb_hm.put("rentedAt", townBlock.getRentedAt());
 
 			updateDB("TOWNBLOCKS", tb_hm, Arrays.asList("world", "x", "z"));
 

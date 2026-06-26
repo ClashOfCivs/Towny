@@ -44,6 +44,7 @@ towns:
         - towny.command.plot.toggle.*
         - towny.command.plot.set.perm
         - towny.command.plot.set.reset
+        - towny.command.plot.rent
         - towny.command.town.online
         - towny.command.town.leave
         - towny.command.town.deposit

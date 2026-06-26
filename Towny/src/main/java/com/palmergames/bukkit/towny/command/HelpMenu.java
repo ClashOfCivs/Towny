@@ -937,6 +937,7 @@ public enum HelpMenu {
 				.add("maxjoindays", Translatable.of("plot_set_help_1.6"))
 				.add("reset", Translatable.of("plot_set_help_2"))
 				.add("[name]", Translatable.of("plot_set_help_3"))
+				.add("rent <price|off>", Translatable.of("plot_set_help_rent"))
 				.add("Valid Levels: [resident/ally/outsider]")
 				.add("Valid Types: [build/destroy/switch/itemuse]")
 				.add("perm [on/off]", Translatable.of("plot_set_help_4"))

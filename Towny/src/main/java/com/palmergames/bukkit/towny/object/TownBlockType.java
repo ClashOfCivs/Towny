@@ -33,7 +33,7 @@ public class TownBlockType {
 	public static final TownBlockType JAIL = new TownBlockType("Jail"); //Enables setting the jail spawn.		
 	public static final TownBlockType FARM = new TownBlockType("Farm"); //Limits build/destroy-able blocks to the farm plot block list.
 	public static final TownBlockType BANK = new TownBlockType("Bank"); // Enables depositing into town and nation banks, if that has been enabled in the config.
-	
+
 	private final String name;
 	private final TownBlockData data;
 

@@ -391,6 +391,10 @@ public class SQLSchema {
 		columns.add(new ColumnData("customPermissionData", "mediumtext DEFAULT NULL"));
 		columns.add(new ColumnData("minTownMembershipDays", "SMALLINT NOT NULL DEFAULT '-1'"));
 		columns.add(new ColumnData("maxTownMembershipDays", "SMALLINT NOT NULL DEFAULT '-1'"));
+		columns.add(new ColumnData("forRent", "TINYINT(1) NOT NULL DEFAULT 0"));
+		columns.add(new ColumnData("rentPrice", "DOUBLE NOT NULL DEFAULT 0.0"));
+		columns.add(new ColumnData("rentedBy", "VARCHAR(36) NOT NULL DEFAULT ''"));
+		columns.add(new ColumnData("rentedAt", "BIGINT NOT NULL DEFAULT 0"));
 		return columns;
 	}
 	

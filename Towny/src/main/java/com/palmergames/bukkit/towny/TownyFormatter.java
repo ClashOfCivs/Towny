@@ -106,6 +106,15 @@ public class TownyFormatter {
 			screen.addComponentOf("claimedat", colourKeyValue(translator.of("msg_plot_perm_claimed_at"), registeredFormat.format(townBlock.getClaimedAt())));
 		if (!townBlock.getType().equals(TownBlockType.RESIDENTIAL))
 			screen.addComponentOf("townblock_plotType", colourKeyValue(translator.of("status_plot_type"), townBlock.getType().toString()));
+		if (townBlock.isForRent()) {
+			if (townBlock.getRentedBy() != null) {
+				Resident tenant = TownyUniverse.getInstance().getResident(townBlock.getRentedBy());
+				String tenantName = tenant != null ? tenant.getName() : "Unknown";
+				screen.addComponentOf("rent_status", colourKeyValue(translator.of("status_rented_by"), tenantName));
+			} else {
+				screen.addComponentOf("rent_status", colourKeyValue(translator.of("status_for_rent"), TownyEconomyHandler.getFormattedBalance(townBlock.getRentPrice()) + "/day"));
+			}
+		}
 		screen.addComponentOf("perm", colourKeyValue(translator.of("status_perm"), ((owner instanceof Resident) ? townBlock.getPermissions().getColourString().replace("n", "t") : townBlock.getPermissions().getColourString().replace("f", "r"))));
 		screen.addComponentOf("pvp", colourKeyValue(translator.of("status_pvp"), ((!preventPVP) ? translator.of("status_on"): translator.of("status_off")))); 
 		screen.addComponentOf("explosion", colourKeyValue(translator.of("explosions"), ((world.isForceExpl() || townBlock.getPermissions().explosion) ? translator.of("status_on"): translator.of("status_off")))); 
